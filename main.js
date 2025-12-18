@@ -13,9 +13,10 @@ const HOST = "0.0.0.0";
 
 app.use(cors()); 
 
+// URL base para las descargas de imágenes
 const API_BASE_URL = process.env.API_BASE_URL || "https://consulta-pe-imagenes-v2.fly.dev";
 
-// --- NUEVAS URLS DE LAS APIS ---
+// --- URLS DE LAS APIS EXTERNAS ---
 const TRABAJOS_API_URL = "https://banckend-poxyv1-cosultape-masitaprex.fly.dev/trabajos";
 const EMPRESAS_API_URL = "https://banckend-poxyv1-cosultape-masitaprex.fly.dev/empresas";
 
@@ -28,9 +29,8 @@ const GITHUB_BRANCH = "main";
 const CANVAS_WIDTH = 1080; 
 const MARGIN = 40;
 const BOX_WIDTH = 950; 
-const BOX_HEIGHT = 180; 
-const BOX_VERTICAL_SPACING = 20;
-const COLOR_TEXT = '#000000';
+const BOX_HEIGHT = 200; // Aumentado ligeramente para evitar recortes de texto
+const BOX_VERTICAL_SPACING = 25;
 const COLOR_SECONDARY_TEXT = '#333333';
 const FONT_FAMILY = "sans-serif";
 
@@ -40,11 +40,11 @@ const API_TYPE_MAP = {
 };
 
 // ==============================================================================
-//  FUNCIONES DE UTILIDAD
+//  FUNCIONES DE UTILIDAD (GITHUB)
 // ==============================================================================
 
 const uploadToGitHub = async (fileName, imageBuffer) => {
-    if (!GITHUB_TOKEN || !GITHUB_REPO) throw new Error("GitHub no configurado.");
+    if (!GITHUB_TOKEN || !GITHUB_REPO) throw new Error("GitHub no configurado en variables de entorno.");
     const [owner, repo] = GITHUB_REPO.split('/');
     const filePath = `public/${fileName}`; 
     const contentBase64 = imageBuffer.toString('base64');
@@ -52,7 +52,7 @@ const uploadToGitHub = async (fileName, imageBuffer) => {
     const publicUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${GITHUB_BRANCH}/${filePath}`;
 
     const data = {
-        message: `feat: Reporte generado para ${fileName}`,
+        message: `feat: Reporte automático generado para ${fileName}`,
         content: contentBase64,
         branch: GITHUB_BRANCH
     };
@@ -82,66 +82,68 @@ const checkIfImageExists = async (dni, apiType) => {
 //  LÓGICA DE DIBUJO
 // ==============================================================================
 
-const drawBackground = (ctx, width, height) => {
-    const grad = ctx.createLinearGradient(0, 0, width, height);
-    grad.addColorStop(0, '#f8f9fa');
-    grad.addColorStop(1, '#e9ecef');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, width, height);
-};
-
 const drawDataBox = (ctx, x, y, title, lines, colorTheme) => {
     const radius = 15;
     ctx.fillStyle = '#ffffff';
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = 'rgba(0,0,0,0.1)';
     
-    // Dibujar caja
+    // Sombra suave
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = 'rgba(0,0,0,0.1)';
     ctx.beginPath();
     ctx.roundRect(x, y, BOX_WIDTH, BOX_HEIGHT, radius);
     ctx.fill();
-    ctx.shadowBlur = 0; // Reset shadow
+    ctx.shadowBlur = 0;
 
-    // Borde lateral de color
+    // Borde decorativo lateral
     ctx.fillStyle = colorTheme;
-    ctx.fillRect(x, y + 20, 8, BOX_HEIGHT - 40);
+    ctx.fillRect(x, y + 20, 10, BOX_HEIGHT - 40);
 
-    // Título (Razón Social o Empresa)
+    // Título principal (Razón Social)
     ctx.textAlign = 'left';
-    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    ctx.font = `bold 22px ${FONT_FAMILY}`;
     ctx.fillStyle = colorTheme;
-    ctx.fillText(title.toUpperCase(), x + 30, y + 50);
+    
+    // Controlar que el título no se desborde
+    const maxTitleWidth = BOX_WIDTH - 60;
+    let displayTitle = title.toUpperCase();
+    if (ctx.measureText(displayTitle).width > maxTitleWidth) {
+        displayTitle = displayTitle.substring(0, 60) + "...";
+    }
+    ctx.fillText(displayTitle, x + 35, y + 55);
 
-    // Líneas de datos
-    ctx.font = `18px ${FONT_FAMILY}`;
+    // Líneas de información
+    ctx.font = `19px ${FONT_FAMILY}`;
     ctx.fillStyle = COLOR_SECONDARY_TEXT;
     lines.forEach((line, index) => {
-        ctx.fillText(line, x + 30, y + 90 + (index * 30));
+        ctx.fillText(line, x + 35, y + 100 + (index * 35));
     });
 };
 
-// ==============================================================================
-//  GENERADOR DE IMÁGENES
-// ==============================================================================
-
 const generateReportImage = async (dni, dataList, apiName) => {
     const count = dataList.length;
-    const headerHeight = 150;
-    const footerHeight = 80;
-    const totalHeight = headerHeight + (count * (BOX_HEIGHT + BOX_VERTICAL_SPACING)) + footerHeight + 100;
+    const headerHeight = 180;
+    const footerHeight = 100;
+    const totalHeight = headerHeight + (count * (BOX_HEIGHT + BOX_VERTICAL_SPACING)) + footerHeight;
 
     const canvas = createCanvas(CANVAS_WIDTH, totalHeight);
     const ctx = canvas.getContext("2d");
 
-    drawBackground(ctx, CANVAS_WIDTH, totalHeight);
+    // Fondo degradado sutil
+    const grad = ctx.createLinearGradient(0, 0, 0, totalHeight);
+    grad.addColorStop(0, '#f1f3f5');
+    grad.addColorStop(1, '#dee2e6');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, totalHeight);
 
     // Cabecera
-    ctx.fillStyle = '#1a237e';
-    ctx.font = `bold 40px ${FONT_FAMILY}`;
+    ctx.fillStyle = '#0d47a1';
+    ctx.font = `bold 42px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`REPORTE: ${apiName}`, CANVAS_WIDTH / 2, 70);
-    ctx.font = `25px ${FONT_FAMILY}`;
-    ctx.fillText(`DOCUMENTO CONSULTADO: ${dni}`, CANVAS_WIDTH / 2, 110);
+    ctx.fillText(`REPORTE DE ${apiName}`, CANVAS_WIDTH / 2, 80);
+    
+    ctx.fillStyle = '#333';
+    ctx.font = `26px ${FONT_FAMILY}`;
+    ctx.fillText(`DOCUMENTO CONSULTADO: ${dni}`, CANVAS_WIDTH / 2, 125);
 
     let currentY = headerHeight;
     const boxX = (CANVAS_WIDTH - BOX_WIDTH) / 2;
@@ -149,24 +151,24 @@ const generateReportImage = async (dni, dataList, apiName) => {
     dataList.forEach((item) => {
         let title = "";
         let lines = [];
-        let color = "#1a237e";
+        let color = "#0d47a1";
 
         if (apiName === "TRABAJOS") {
-            title = item.rz || "SIN RAZÓN SOCIAL";
+            title = item.rz || "EMPRESA NO IDENTIFICADA";
             lines = [
-                `RUC: ${item.ruc}`,
-                `INICIO: ${item.fip}`,
-                `ESTADO: ${item.ffp}`
+                `RUC: ${item.ruc || 'N/A'}`,
+                `FECHA INICIO: ${item.fip || 'N/A'}`,
+                `ESTADO: ${item.ffp || 'VIGENTE'}`
             ];
-            color = "#2e7d32"; // Verde para trabajos
+            color = "#2e7d32"; // Verde
         } else {
-            title = item.razon_social || "EMPRESA";
+            title = item.razon_social || "EMPRESA NO IDENTIFICADA";
             lines = [
-                `RUC: ${item.ruc}`,
-                `CARGO: ${item.cargo}`,
-                `DESDE: ${item.desde}`
+                `RUC: ${item.ruc || 'N/A'}`,
+                `CARGO: ${item.cargo || 'N/A'}`,
+                `OCUPA PUESTO DESDE: ${item.desde || 'N/A'}`
             ];
-            color = "#c62828"; // Rojo para empresas
+            color = "#c62828"; // Rojo
         }
 
         drawDataBox(ctx, boxX, currentY, title, lines, color);
@@ -174,35 +176,38 @@ const generateReportImage = async (dni, dataList, apiName) => {
     });
 
     // Pie de página
-    ctx.fillStyle = '#555';
-    ctx.font = `italic 16px ${FONT_FAMILY}`;
+    ctx.fillStyle = '#666';
+    ctx.font = `italic 18px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`Generado automáticamente - Total de registros: ${count}`, CANVAS_WIDTH / 2, totalHeight - 40);
+    ctx.fillText(`Resultados obtenidos automáticamente - Total registros: ${count}`, CANVAS_WIDTH / 2, totalHeight - 50);
 
     return canvas.toBuffer('image/png');
 };
 
 // ==============================================================================
-//  ENDPOINTS
+//  ENDPOINTS (CORREGIDOS)
 // ==============================================================================
 
 app.get("/consultar-trabajos", async (req, res) => {
     const { dni } = req.query;
-    if (!dni) return res.status(400).json({ message: "DNI requerido" });
+    if (!dni) return res.status(400).json({ message: "error", detail: "DNI requerido" });
 
     try {
         const response = await axios.get(`${TRABAJOS_API_URL}?dni=${dni}`);
         const result = response.data.result;
 
-        if (!result || result.quantity === 0) {
-            return res.status(404).json({ message: "No se encontraron datos" });
+        if (!result || !result.coincidences || result.coincidences.length === 0) {
+            return res.status(404).json({ message: "error", detail: "No se encontraron datos laborales" });
         }
 
         const apiType = API_TYPE_MAP["TRABAJOS"];
         const existingUrl = await checkIfImageExists(dni, apiType);
         
         if (existingUrl) {
-            return res.json({ message: "found data", result: { quantity: result.quantity, url: `${API_BASE_URL}/descargar-ficha?url=${encodeURIComponent(existingUrl)}` } });
+            return res.json({ 
+                message: "found data", 
+                result: { quantity: result.quantity, url: `${API_BASE_URL}/descargar-ficha?url=${encodeURIComponent(existingUrl)}` } 
+            });
         }
 
         const buffer = await generateReportImage(dni, result.coincidences, "TRABAJOS");
@@ -223,21 +228,25 @@ app.get("/consultar-trabajos", async (req, res) => {
 
 app.get("/consultar-empresas", async (req, res) => {
     const { dni } = req.query;
-    if (!dni) return res.status(400).json({ message: "DNI requerido" });
+    if (!dni) return res.status(400).json({ message: "error", detail: "DNI requerido" });
 
     try {
-        const response = await axios.get(`${EMPREAS_API_URL}?dni=${dni}`);
+        // CORRECCIÓN: Se cambió EMPREAS_API_URL por EMPRESAS_API_URL
+        const response = await axios.get(`${EMPRESAS_API_URL}?dni=${dni}`);
         const result = response.data.result;
 
-        if (!result || result.quantity === 0) {
-            return res.status(404).json({ message: "No se encontraron datos" });
+        if (!result || !result.coincidences || result.coincidences.length === 0) {
+            return res.status(404).json({ message: "error", detail: "No se encontraron datos empresariales" });
         }
 
         const apiType = API_TYPE_MAP["EMPRESAS"];
         const existingUrl = await checkIfImageExists(dni, apiType);
         
         if (existingUrl) {
-            return res.json({ message: "found data", result: { quantity: result.quantity, url: `${API_BASE_URL}/descargar-ficha?url=${encodeURIComponent(existingUrl)}` } });
+            return res.json({ 
+                message: "found data", 
+                result: { quantity: result.quantity, url: `${API_BASE_URL}/descargar-ficha?url=${encodeURIComponent(existingUrl)}` } 
+            });
         }
 
         const buffer = await generateReportImage(dni, result.coincidences, "EMPRESAS");
@@ -256,14 +265,19 @@ app.get("/consultar-empresas", async (req, res) => {
     }
 });
 
-// Proxy de descarga
+// Proxy para descarga directa de imagen
 app.get("/descargar-ficha", async (req, res) => {
     let { url } = req.query;
+    if (!url) return res.status(400).send("URL faltante");
     try {
         const response = await axios.get(decodeURIComponent(url), { responseType: 'arraybuffer' });
         res.set('Content-Type', 'image/png');
         res.send(Buffer.from(response.data));
-    } catch (e) { res.status(500).send("Error descarga"); }
+    } catch (e) { 
+        res.status(500).send("Error al descargar la imagen desde el servidor de almacenamiento."); 
+    }
 });
 
-app.listen(PORT, HOST, () => console.log(`Servidor activo en puerto ${PORT}`));
+app.listen(PORT, HOST, () => {
+    console.log(`Servidor de Consultas iniciado en http://${HOST}:${PORT}`);
+});
