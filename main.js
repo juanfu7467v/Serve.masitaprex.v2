@@ -44,11 +44,10 @@ const uploadPDFToGitHub = async (fileName, pdfBuffer) => {
 };
 
 /**
- * Genera el PDF con posicionamiento dinámico y encabezados personalizados
+ * Genera el PDF con QR, Renuncia y Resultados Completos
  */
 const generatePDF = async (dni, data, tipo) => {
     const qrDataUrl = await QRCode.toDataURL(APK_LINK);
-    const tituloReporte = tipo === 'SUELDOS' ? 'REPORTE DE SUELDOS' : 'REPORTE DE CONSUMOS';
 
     return new Promise((resolve) => {
         const doc = new PDFDocument({ 
@@ -61,16 +60,17 @@ const generatePDF = async (dni, data, tipo) => {
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-        // --- ENCABEZADO PERSONALIZADO ---
-        doc.fontSize(25).font('Helvetica-Bold').fillColor('#000000').text(tituloReporte, 40, 45);
-        doc.fontSize(12).font('Helvetica').text('Consultas Pe APK', 40, 80);
+        // --- ENCABEZADO DINÁMICO ---
+        const tituloReporte = tipo === 'SUELDOS' ? 'Reporte de Sueldos' : 'Reporte de Consumos';
+        
+        doc.fontSize(25).font('Helvetica-Bold').fillColor('#000000').text(tituloReporte, 40, 50);
         
         // Texto superior derecha
-        doc.fontSize(10).font('Helvetica').text('App Oficial', 450, 45, { align: 'right' });
+        doc.fontSize(10).font('Helvetica').text('Consulta pe apk', 450, 60, { align: 'right' });
 
         // --- SECCIÓN: INFORMACIÓN ---
         doc.rect(40, 110, 520, 20).fill('#f0f0f0').stroke('#000000');
-        doc.fillColor('#000000').fontSize(11).font('Helvetica-Bold').text('Información de Consulta', 45, 115);
+        doc.fillColor('#000000').fontSize(11).font('Helvetica-Bold').text('Información General', 45, 115);
 
         const infoTop = 130;
         doc.rect(40, infoTop, 130, 25).stroke();
@@ -83,18 +83,18 @@ const generatePDF = async (dni, data, tipo) => {
         doc.rect(400, infoTop, 160, 25).stroke();
         doc.font('Helvetica').text(new Date().toLocaleDateString(), 405, infoTop + 7);
 
-        // --- TABLA DE RESULTADOS ---
+        // --- TABLA DE RESULTADOS COMPLETOS ---
         let currentY = 180;
         doc.rect(40, currentY, 520, 20).fill('#f0f0f0').stroke('#000000');
-        doc.fillColor('#000000').font('Helvetica-Bold').text(`Detalle de Registros Encontrados`, 45, currentY + 5);
+        doc.fillColor('#000000').font('Helvetica-Bold').text(`Detalle de ${tipo}`, 45, currentY + 5);
         
         currentY += 20;
         const col1 = 200;
         const col2 = 320;
 
         data.forEach((item, index) => {
-            // Salto de página si llega al límite inferior
-            if (currentY > 740) {
+            // Verificar si necesitamos nueva página
+            if (currentY > 750) {
                 doc.addPage();
                 currentY = 50;
             }
@@ -111,7 +111,7 @@ const generatePDF = async (dni, data, tipo) => {
             if (tipo === 'SUELDOS') {
                 const nombreEmpresa = (item.empresa || 'N/A').substring(0, 40);
                 doc.text(nombreEmpresa, 45, currentY + 8);
-                doc.text(`S/ ${item.sueldo}  |  Periodo: ${item.periodo}  |  Sit: ${item.situacion || '-'}`, 45 + col1, currentY + 8);
+                doc.text(`S/ ${item.sueldo}  |  Período: ${item.periodo}  |  Sit: ${item.situacion || '-'}`, 45 + col1, currentY + 8);
             } else {
                 const razonSocial = (item.razonSocial || 'N/A').substring(0, 40);
                 doc.text(razonSocial, 45, currentY + 8);
@@ -120,24 +120,23 @@ const generatePDF = async (dni, data, tipo) => {
             currentY += 25;
         });
 
-        // --- FOOTER DINÁMICO (PEGADO A LA TABLA) ---
-        // Espacio pequeño entre la tabla y el final
-        currentY += 20;
-
-        // Validar si hay espacio para el QR y la renuncia en la misma página
-        if (currentY > 700) {
-            doc.addPage();
-            currentY = 50;
+        // --- SECCIÓN FINAL (Inmediatamente después de la tabla) ---
+        // Si queda muy poco espacio al final, saltamos de página
+        if (currentY > 700) { 
+            doc.addPage(); 
+            currentY = 50; 
+        } else {
+            currentY += 30; // Espacio reducido después de la tabla
         }
 
-        // Renuncia de responsabilidad (Ajustada a la posición de la tabla)
+        // Renuncia de responsabilidad
         doc.fontSize(7).font('Helvetica-Oblique').fillColor('#666666');
         const disclaimer = "Renuncia de responsabilidad: Este documento es de carácter informativo. Los datos provienen de fuentes externas públicas. La aplicación no se responsabiliza por la veracidad o actualización de los mismos ante entidades oficiales.";
-        doc.text(disclaimer, 40, currentY, { width: 320, align: 'justify' });
+        doc.text(disclaimer, 40, currentY, { width: 350, align: 'justify' });
 
-        // QR (Pegado al final de la tabla a la derecha)
-        doc.image(qrDataUrl, 460, currentY - 10, { width: 80 });
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000000').text('ESCANEA PARA DESCARGAR', 440, currentY + 75, { width: 120, align: 'center' });
+        // QR alineado con la renuncia
+        doc.image(qrDataUrl, 480, currentY - 10, { width: 70 });
+        doc.fontSize(6).font('Helvetica-Bold').fillColor('#000000').text('ESCANEA PARA DESCARGAR APP', 465, currentY + 65, { width: 100, align: 'center' });
 
         doc.end();
     });
@@ -177,7 +176,7 @@ app.get("/consultar-consumos", async (req, res) => {
         const result = response.data.result;
         if (!result || result.quantity === 0) throw new Error("Sin datos");
 
-        const pdfBuffer = await generatePDF(dni, result.result.coincidences ? result.result.coincidences : result.coincidences, "CONSUMOS");
+        const pdfBuffer = await generatePDF(dni, result.coincidences, "CONSUMOS");
         const fileName = `CONSUMO_${dni}_${Date.now()}.pdf`;
         const githubUrl = await uploadPDFToGitHub(fileName, pdfBuffer);
 
@@ -192,5 +191,5 @@ app.get("/consultar-consumos", async (req, res) => {
 });
 
 app.listen(PORT, HOST, () => {
-    console.log(`Servidor PDF activo en http://${HOST}:${PORT}`);
+    console.log(`Servidor PDF con QR optimizado activo en http://${HOST}:${PORT}`);
 });
