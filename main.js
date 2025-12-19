@@ -44,10 +44,11 @@ const uploadPDFToGitHub = async (fileName, pdfBuffer) => {
 };
 
 /**
- * Genera el PDF con QR y Renuncia pegados al final de la tabla
+ * Genera el PDF con posicionamiento dinámico y encabezados personalizados
  */
 const generatePDF = async (dni, data, tipo) => {
     const qrDataUrl = await QRCode.toDataURL(APK_LINK);
+    const tituloReporte = tipo === 'SUELDOS' ? 'REPORTE DE SUELDOS' : 'REPORTE DE CONSUMOS';
 
     return new Promise((resolve) => {
         const doc = new PDFDocument({ 
@@ -60,16 +61,18 @@ const generatePDF = async (dni, data, tipo) => {
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-        // --- ENCABEZADO ---
-        doc.fontSize(40).font('Helvetica-Bold').fillColor('#000000').text('Pe', 40, 40);
-        doc.fontSize(20).text('RESULTADO', 40, 85);
-        doc.fontSize(10).font('Helvetica').text('Consulta pe apk', 450, 85, { align: 'right' });
+        // --- ENCABEZADO PERSONALIZADO ---
+        doc.fontSize(25).font('Helvetica-Bold').fillColor('#000000').text(tituloReporte, 40, 45);
+        doc.fontSize(12).font('Helvetica').text('Consultas Pe APK', 40, 80);
+        
+        // Texto superior derecha
+        doc.fontSize(10).font('Helvetica').text('App Oficial', 450, 45, { align: 'right' });
 
         // --- SECCIÓN: INFORMACIÓN ---
-        doc.rect(40, 130, 520, 20).fill('#f0f0f0').stroke('#000000');
-        doc.fillColor('#000000').fontSize(11).font('Helvetica-Bold').text('Información General', 45, 135);
+        doc.rect(40, 110, 520, 20).fill('#f0f0f0').stroke('#000000');
+        doc.fillColor('#000000').fontSize(11).font('Helvetica-Bold').text('Información de Consulta', 45, 115);
 
-        const infoTop = 150;
+        const infoTop = 130;
         doc.rect(40, infoTop, 130, 25).stroke();
         doc.text('DNI Consultado', 45, infoTop + 7);
         doc.rect(170, infoTop, 130, 25).stroke();
@@ -81,17 +84,17 @@ const generatePDF = async (dni, data, tipo) => {
         doc.font('Helvetica').text(new Date().toLocaleDateString(), 405, infoTop + 7);
 
         // --- TABLA DE RESULTADOS ---
-        let currentY = 200;
+        let currentY = 180;
         doc.rect(40, currentY, 520, 20).fill('#f0f0f0').stroke('#000000');
-        doc.fillColor('#000000').font('Helvetica-Bold').text(`Detalle de ${tipo}`, 45, currentY + 5);
+        doc.fillColor('#000000').font('Helvetica-Bold').text(`Detalle de Registros Encontrados`, 45, currentY + 5);
         
         currentY += 20;
         const col1 = 200;
         const col2 = 320;
 
         data.forEach((item, index) => {
-            // Si la tabla llega muy abajo, saltar de página
-            if (currentY > 720) {
+            // Salto de página si llega al límite inferior
+            if (currentY > 740) {
                 doc.addPage();
                 currentY = 50;
             }
@@ -117,24 +120,24 @@ const generatePDF = async (dni, data, tipo) => {
             currentY += 25;
         });
 
-        // --- SECCIÓN FINAL (PEGADA A LA TABLA) ---
-        // Dejamos un espacio de 30 pixeles después de la última fila
-        currentY += 30;
+        // --- FOOTER DINÁMICO (PEGADO A LA TABLA) ---
+        // Espacio pequeño entre la tabla y el final
+        currentY += 20;
 
-        // Si después del espacio nos queda muy poco lugar para el QR, saltamos de página
+        // Validar si hay espacio para el QR y la renuncia en la misma página
         if (currentY > 700) {
             doc.addPage();
             currentY = 50;
         }
 
-        // Dibujar Renuncia de responsabilidad
+        // Renuncia de responsabilidad (Ajustada a la posición de la tabla)
         doc.fontSize(7).font('Helvetica-Oblique').fillColor('#666666');
         const disclaimer = "Renuncia de responsabilidad: Este documento es de carácter informativo. Los datos provienen de fuentes externas públicas. La aplicación no se responsabiliza por la veracidad o actualización de los mismos ante entidades oficiales.";
-        doc.text(disclaimer, 40, currentY, { width: 350, align: 'justify' });
+        doc.text(disclaimer, 40, currentY, { width: 320, align: 'justify' });
 
-        // Dibujar QR (alineado con la renuncia pero a la derecha)
+        // QR (Pegado al final de la tabla a la derecha)
         doc.image(qrDataUrl, 460, currentY - 10, { width: 80 });
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000000').text('ESCANEA PARA DESCARGAR APP', 440, currentY + 75, { width: 120, align: 'center' });
+        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000000').text('ESCANEA PARA DESCARGAR', 440, currentY + 75, { width: 120, align: 'center' });
 
         doc.end();
     });
@@ -174,7 +177,7 @@ app.get("/consultar-consumos", async (req, res) => {
         const result = response.data.result;
         if (!result || result.quantity === 0) throw new Error("Sin datos");
 
-        const pdfBuffer = await generatePDF(dni, result.coincidences, "CONSUMOS");
+        const pdfBuffer = await generatePDF(dni, result.result.coincidences ? result.result.coincidences : result.coincidences, "CONSUMOS");
         const fileName = `CONSUMO_${dni}_${Date.now()}.pdf`;
         const githubUrl = await uploadPDFToGitHub(fileName, pdfBuffer);
 
@@ -189,5 +192,5 @@ app.get("/consultar-consumos", async (req, res) => {
 });
 
 app.listen(PORT, HOST, () => {
-    console.log(`Servidor PDF optimizado activo en http://${HOST}:${PORT}`);
+    console.log(`Servidor PDF activo en http://${HOST}:${PORT}`);
 });
