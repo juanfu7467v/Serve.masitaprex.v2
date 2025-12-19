@@ -44,10 +44,9 @@ const uploadPDFToGitHub = async (fileName, pdfBuffer) => {
 };
 
 /**
- * Genera el PDF con QR, Renuncia y Resultados Completos
+ * Genera el PDF con QR y Renuncia pegados al final de la tabla
  */
 const generatePDF = async (dni, data, tipo) => {
-    // Generar el QR antes de empezar el PDF
     const qrDataUrl = await QRCode.toDataURL(APK_LINK);
 
     return new Promise((resolve) => {
@@ -64,8 +63,6 @@ const generatePDF = async (dni, data, tipo) => {
         // --- ENCABEZADO ---
         doc.fontSize(40).font('Helvetica-Bold').fillColor('#000000').text('Pe', 40, 40);
         doc.fontSize(20).text('RESULTADO', 40, 85);
-        
-        // Texto superior derecha (Sin línea)
         doc.fontSize(10).font('Helvetica').text('Consulta pe apk', 450, 85, { align: 'right' });
 
         // --- SECCIÓN: INFORMACIÓN ---
@@ -83,7 +80,7 @@ const generatePDF = async (dni, data, tipo) => {
         doc.rect(400, infoTop, 160, 25).stroke();
         doc.font('Helvetica').text(new Date().toLocaleDateString(), 405, infoTop + 7);
 
-        // --- TABLA DE RESULTADOS COMPLETOS ---
+        // --- TABLA DE RESULTADOS ---
         let currentY = 200;
         doc.rect(40, currentY, 520, 20).fill('#f0f0f0').stroke('#000000');
         doc.fillColor('#000000').font('Helvetica-Bold').text(`Detalle de ${tipo}`, 45, currentY + 5);
@@ -92,10 +89,9 @@ const generatePDF = async (dni, data, tipo) => {
         const col1 = 200;
         const col2 = 320;
 
-        // Se eliminó .slice para procesar TODO el array
         data.forEach((item, index) => {
-            // Verificar si necesitamos nueva página (dejando espacio para el footer)
-            if (currentY > 700) {
+            // Si la tabla llega muy abajo, saltar de página
+            if (currentY > 720) {
                 doc.addPage();
                 currentY = 50;
             }
@@ -112,7 +108,7 @@ const generatePDF = async (dni, data, tipo) => {
             if (tipo === 'SUELDOS') {
                 const nombreEmpresa = (item.empresa || 'N/A').substring(0, 40);
                 doc.text(nombreEmpresa, 45, currentY + 8);
-                doc.text(`S/ ${item.sueldo}  |  Período: ${item.periodo}  |  Sit: ${item.situacion || '-'}`, 45 + col1, currentY + 8);
+                doc.text(`S/ ${item.sueldo}  |  Periodo: ${item.periodo}  |  Sit: ${item.situacion || '-'}`, 45 + col1, currentY + 8);
             } else {
                 const razonSocial = (item.razonSocial || 'N/A').substring(0, 40);
                 doc.text(razonSocial, 45, currentY + 8);
@@ -121,19 +117,24 @@ const generatePDF = async (dni, data, tipo) => {
             currentY += 25;
         });
 
-        // --- FOOTER (Se repite en la última página o donde termine) ---
-        if (currentY > 650) { doc.addPage(); currentY = 50; }
+        // --- SECCIÓN FINAL (PEGADA A LA TABLA) ---
+        // Dejamos un espacio de 30 pixeles después de la última fila
+        currentY += 30;
 
-        const footerY = 730;
+        // Si después del espacio nos queda muy poco lugar para el QR, saltamos de página
+        if (currentY > 700) {
+            doc.addPage();
+            currentY = 50;
+        }
 
-        // Renuncia de responsabilidad (Inferior Izquierda)
+        // Dibujar Renuncia de responsabilidad
         doc.fontSize(7).font('Helvetica-Oblique').fillColor('#666666');
         const disclaimer = "Renuncia de responsabilidad: Este documento es de carácter informativo. Los datos provienen de fuentes externas públicas. La aplicación no se responsabiliza por la veracidad o actualización de los mismos ante entidades oficiales.";
-        doc.text(disclaimer, 40, footerY, { width: 350, align: 'justify' });
+        doc.text(disclaimer, 40, currentY, { width: 350, align: 'justify' });
 
-        // QR (Inferior Derecha)
-        doc.image(qrDataUrl, 480, footerY - 20, { width: 80 });
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000000').text('ESCANEA PARA DESCARGAR APP', 455, footerY + 65, { width: 120, align: 'center' });
+        // Dibujar QR (alineado con la renuncia pero a la derecha)
+        doc.image(qrDataUrl, 460, currentY - 10, { width: 80 });
+        doc.fontSize(7).font('Helvetica-Bold').fillColor('#000000').text('ESCANEA PARA DESCARGAR APP', 440, currentY + 75, { width: 120, align: 'center' });
 
         doc.end();
     });
@@ -188,5 +189,5 @@ app.get("/consultar-consumos", async (req, res) => {
 });
 
 app.listen(PORT, HOST, () => {
-    console.log(`Servidor PDF con QR y reporte completo activo en http://${HOST}:${PORT}`);
+    console.log(`Servidor PDF optimizado activo en http://${HOST}:${PORT}`);
 });
